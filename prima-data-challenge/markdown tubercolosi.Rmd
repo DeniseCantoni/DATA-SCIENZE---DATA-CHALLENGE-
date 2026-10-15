@@ -1,0 +1,100 @@
+---
+title: "prima data challenge tubercolosi"
+author: "Denise"
+date: '2026-10-12'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#importazione librerie
+```{r}
+library(dplyr)
+library(stringr)
+library(readr)
+library(tidyr)
+```
+
+## R Importazione dei dati
+```{r}
+#carica il pacchetto who
+data("who")
+who
+```
+
+#Passo 1 (unione)
+```{r}
+
+who1_with_na <- who %>% 
+  pivot_longer(cols = new_sp_m014:newrel_f65, values_to = "cases", names_to = "key")
+who1_with_na
+
+#tolgo valori na presenti
+who1 <- who %>% 
+  pivot_longer(cols = new_sp_m014:newrel_f65, values_to = "cases", names_to = "key", values_drop_na = TRUE)
+who1
+```
+
+#Passo 2 (replace)
+```{r}
+# stringr::str_replace() serve a cercare una parte di una stringa e sostituirla con un'altra
+who2 <- who1 %>% 
+  mutate( key = stringr::str_replace(key, "newrel", "new_rel"))
+who2
+```
+
+#Passo 3 (separate)
+```{r}
+who3 <- who2 %>% 
+  separate(key, into = c("new", "type", "sexage"), sep ="_")
+who3
+```
+#separo sesso dall'età
+```{r}
+who4 <- who3 %>% 
+  separate (sexage, into=c("sex", "age"), sep= 1)
+who4
+```
+
+#separo age in low e hight
+```{r}
+#prima sistemo i valori di age in modo che siano tutti con lo stesso formato
+who5 <- who4 %>% 
+  mutate( 
+    age = stringr::str_replace(age, "014", "0014"),
+    age = stringr::str_replace(age, "65", "65100")) 
+
+#separo le due variabili
+who5 <- who5%>%
+  separate(age, into = c("age_low", "age_high"), sep = 2)
+who5
+
+```
+
+#controllo costanza colonna new
+```{r}
+who5 %>% group_by(new) %>% summarise(count = n())
+#c'è solo un valore possibile della variabile new quindi è costante
+
+who6 <- who5 %>%
+  select(-new, -iso2, -iso3)
+who6
+```
+
+#crea una pipline complessa 
+```{r}
+who_finale <- who %>% 
+  pivot_longer(cols = new_sp_m014:newrel_f65, values_to = "cases", names_to = "key", values_drop_na = TRUE) %>% 
+  mutate( key = stringr::str_replace(key, "newrel", "new_rel")) %>% 
+  separate(key, into = c("new", "type", "sexage"), sep ="_") %>%
+  separate (sexage, into=c("sex", "age"), sep= 1) %>%
+  mutate( age = stringr::str_replace(age, "014", "0014"), age = stringr::str_replace(age, "65", "65100")) %>%
+  separate(age, into = c("age_low", "age_high"), sep = 2) %>%
+  select(-new, -iso2, -iso3)
+
+who_finale
+  
+```
+
