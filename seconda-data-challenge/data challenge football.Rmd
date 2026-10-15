@@ -1,0 +1,260 @@
+---
+title: "data challeng 2 calcio"
+author: "Denise"
+date: '2026-10-14'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+1. Pensa a come estrarre i dati dal sito web 
+
+- Inizialmente avrei scaricato manulamente uno a uno i dataset e li avrei magari uniti in un unico file csv per poter fare un unico import dei file. Sul sito però ci cono molti csv da scaricare e il lavoro sarebbe parecchio.
+
+- Bisognerebbe trovare un modo per isolare i link e con una funzione inserire i link in delle variabili, oppure ancora meglio in un vettore. Con un ciclo si potrebbe importare tutti i dataset navigando nel vettore con i link. Si potrebbero unire i dataset e lavorare con un unico datset.
+
+2. Chiedere all' AI di scrivere codice per importare i dati tramite scraping del sito web.
+
+```{r}
+#INSTALLARE E CARICARE I PACCHETTI NECESSARI
+
+library(rvest)
+library(dplyr)
+library(purrr)
+library(readr)
+library(tidyr)
+
+```
+
+```{r}
+#ESTRARRE I LINK DEI DATASET
+
+# Pagina web con i dati della Serie A
+url <- "https://www.football-data.co.uk/italym.php"
+
+# Leggere il contenuto HTML della pagina
+pagina <- read_html(url)
+
+# Estrarre tutti i collegamenti presenti nella pagina
+link <- pagina %>%
+  html_elements("a") %>%     #seleziona tutti gli elementi HTML che corrispondono al selettore "a" che identifica un collegamento
+  html_attr("href")         #estrae valore del attributo href ovvero il link
+
+# Conservare soltanto i link ai file CSV della Serie A
+#grepl() controlla se una determinata stringa contiene un testo che corrisponde a un modello, chiamato pattern.
+link_csv <- link[
+  grepl("mmz4281/.*/I1\\.csv$", link)      
+]
+
+# Trasformare i link relativi in URL completi
+link_csv <- unique(
+  xml2::url_absolute(link_csv, url)
+)
+
+# Visualizzare i link trovati
+print(link_csv)
+
+```
+
+```{r}
+#IMPORTARE E UNIRE TUTTI I DATASET
+
+# Funzione per leggere un singolo CSV
+leggi_partite <- function(url) {
+
+  dati <- read_csv(
+    url,
+    show_col_types = FALSE,
+    col_types = cols(
+      Date = col_character(),
+      .default = col_guess()    #deve provare a riconoscere automaticamente il tipo di dato più appropriato per tutte le colonne
+    )
+  )
+
+  # Selezionare le colonne richieste
+  dati %>%
+    select(
+      Date,
+      HomeTeam,
+      AwayTeam,
+      FTHG,
+      FTAG
+    ) %>%
+    # Convertire la data e mantenere quelle valide
+    mutate(
+      Date = as.Date(Date, format = "%d/%m/%y")
+    ) %>%
+    filter(!is.na(Date))
+}
+
+# Importare tutti i file e unirli
+partite <- map_dfr(
+  link_csv,
+  leggi_partite
+)
+
+partite
+
+```
+
+
+
+3. calcola le statistiche per ogni squadra 
+- partite
+-vittorie
+-sconfitte
+-pareggi
+-punti
+-punti per partita
+```{r}
+
+partite <- partite %>%
+  mutate(risultato = case_when(
+    FTHG > FTAG  ~ "H",
+    FTHG < FTAG  ~ "A",
+    FTHG == FTAG ~ "P"
+  ))
+
+partite
+
+```
+
+Inizialmente ho pensato ad un modo per unire le informazioni presenti nelle partite fuori casa e in quelle in casa e mi è venuto in mente questo metodo che mi permetteva di arrivare alle statistiche di gioco volute. Questo procedimento però richiedeva la costruzione di tanti dataset intermedi.
+```{r}
+#PARTITE VINTE
+
+num_partiteH <- partite %>% 
+  filter(risultato == "H") %>% 
+  group_by(Squadra = HomeTeam) %>% count(risultatoH = risultato, name = "nH")
+
+num_partiteH
+
+num_partiteA <- partite %>% 
+  filter(risultato == "A") %>% 
+  group_by(Squadra = AwayTeam) %>% count(risultatoA = risultato, name = "nA")
+
+num_partiteA
+
+num_partiteTOT_vinte <- inner_join(num_partiteA, num_partiteH) %>% select(nA, nH) %>% mutate(Partite_vinte = nA+nH) 
+num_partiteTOT_vinte
+```
+
+```{r}
+#PARTITE PERSE
+
+num_partiteH <- partite %>% 
+  filter(risultato == "H") %>% 
+  group_by(Squadra = AwayTeam) %>% count(risultatoH = risultato, name = "n_perseA")
+
+num_partiteH
+
+num_partiteA <- partite %>% 
+  filter(risultato == "A") %>% 
+  group_by(Squadra = HomeTeam) %>% count(risultatoA = risultato, name = "n_perseH")
+
+num_partiteA
+
+num_partiteTOT_perse <- inner_join(num_partiteA, num_partiteH) %>% 
+  select(n_perseA, n_perseH) %>% 
+  mutate(Partite_perse = n_perseA+n_perseH)
+
+num_partiteTOT_perse
+```
+
+```{r}
+#PARTITE PAREGGIATE
+
+num_partiteD_casa <- partite %>% 
+  filter(risultato == "P") %>% 
+  group_by(Squadra = HomeTeam) %>% count(risultato_casa = risultato, name = "pareggi_casa")
+
+num_partiteD_casa
+
+num_partiteD_fuori <- partite %>% 
+  filter(risultato == "P") %>% 
+  group_by(Squadra = AwayTeam) %>% count(risultato_fuori = risultato, name = "pareggi_fuori")
+
+num_partiteD_fuori
+
+num_partiteTOT_pareggiate <- inner_join(num_partiteD_fuori, num_partiteD_casa) %>% 
+  select(pareggi_fuori, pareggi_casa) %>% 
+  mutate(Partite_pareggiate = pareggi_fuori+pareggi_casa)
+
+num_partiteTOT_pareggiate
+```
+
+```{r}
+#PARTITE GIOCATE
+num_partite_giocate <- inner_join(num_partiteTOT_vinte, num_partiteTOT_perse) %>% 
+  inner_join(num_partiteTOT_pareggiate) %>%
+  select(Partite_vinte,Partite_perse, Partite_pareggiate) %>% 
+  mutate(Partite_giocate = Partite_vinte + Partite_perse + Partite_pareggiate)
+
+num_partite_giocate
+```
+
+
+Per questo motivo rivedendo anche la dta challenge precedente mi sono accorta che potevo arrivare allo steso risultato con meno passaggi modificando il dataset importato per adattarlo alle necessità, ottenendo una solo colonna squadra che contenesse i nomi delle squadre di calcio e una colonna aggiuntiva luogo, che mi dicesse se la partita è stata giocata in casa o fuori. 
+Ho modificato le colonne in modo da ottenere i valori dei gol fatti durante la oartita e dei gol subiti durante la partita.
+creato una tabella risultato che mi dicesse se la squadra avesse vinto, perso o pareggiato indipendentemente dal fatto che fosse in caso o fuori casa. In questo modo ho assegnato i punti ricevuti in base al risultato.
+Ho poi selezionato solo le colonne di interesse.
+
+Dopo questa pulizia del dataset ho calcolato le statistiche di gioco che mi interessavano usando un grup-by. in questo modo usando sum e summarise ho sommato i vari punteggi, gol e numero di partite...
+```{r}
+PARTITE <- partite %>%
+  pivot_longer(cols = c(HomeTeam, AwayTeam), names_to = "Luogo",values_to = "Squadra") %>%
+  mutate(
+    Luogo = case_when(
+      Luogo == "HomeTeam" ~ "Casa",
+      Luogo == "AwayTeam" ~ "Trasferta"
+    ),
+    Gol_fatti = case_when(
+      Luogo == "Casa" ~ FTHG,
+      Luogo == "Trasferta" ~ FTAG
+    ),
+    Gol_subiti = case_when(
+      Luogo == "Casa" ~ FTAG,
+      Luogo == "Trasferta" ~ FTHG
+    ),
+    Risultato = case_when(
+      Gol_fatti > Gol_subiti ~ "Vittoria",
+      Gol_fatti < Gol_subiti ~ "Sconfitta",
+      TRUE ~ "Pareggio"
+    ),
+    Punti = case_when(
+      Risultato == "Vittoria" ~ 3,
+      Risultato == "Pareggio" ~ 1,
+      TRUE ~ 0
+    )) %>%
+  select(Squadra, Luogo, Gol_fatti, Gol_subiti, Risultato, Punti)
+
+statistiche2 <- PARTITE %>%
+  group_by(Squadra) %>%
+  summarise(
+    Partite_giocate = n(),
+    Vittorie = sum(Risultato == "Vittoria"),
+    Pareggi = sum(Risultato == "Pareggio"),
+    Sconfitte = sum(Risultato == "Sconfitta"),
+    Gol_fatti = sum(Gol_fatti),
+    Gol_subiti = sum(Gol_subiti),
+    Gol_totali = Gol_fatti + Gol_subiti,
+    Punti_totali = sum(Punti),
+    Gol_medi_partita = mean(Gol_fatti),
+    .groups = "drop"
+  )
+
+PARTITE
+statistiche2
+
+```
+
+
+4. Formula almeno 3 domande basate sui dati a disposizione
+
+- Calcola il numero di partite vinte in casa e in trasferta e indica in quale situazione una squadra gioca meglio e vince di più. Quali sono le squadre che giocano meglio in casa? quali in trasferta? mediamente si gioca megli oin casa o trasferta?
+
+- Qual è la squadra migliore: con più punti? con più gol segnati? con meno gol subiti?
+
+- In quale anno sono stati seganti più gol da una squadra?
