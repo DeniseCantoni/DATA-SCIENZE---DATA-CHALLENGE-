@@ -1,0 +1,256 @@
+---
+title: "DataChallenge 4"
+author: "Denise Cantoni"
+date: "2026-10-21"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message=FALSE)
+```
+
+carico i dati necessari
+
+```{r }
+library(dplyr)
+library(tidyverse)
+data <- read.csv("data.csv")
+head(data, 10)
+```
+
+## PRIMA DOMANDA
+
+Has the White an advantage over the Black, that is, is there a first-mover advantage?
+
+```{r }
+risultati <- data |>
+  count(Score)
+
+vittorie_bianco <- risultati$n[risultati$Score == 1.0]
+vittorie_nero <- risultati$n[risultati$Score == 0.0]
+
+if (vittorie_bianco> vittorie_nero) {
+  cat("Il numero di vittorie per il bianco è:", vittorie_bianco, " ed è maggiore delle vittorie per il nero:", vittorie_nero," quindi si presume che ci sia un vantaggio nell'iniziare la partita." )
+} else {
+  cat("Il numero di vittorie per il nero è:", vittorie_nero, " ed è maggiore delle vittorie per il bianco:", vittorie_bianco," quindi si presume che NON ci sia un vantaggio nell'iniziare la partita." )
+} 
+
+```
+
+## SECONDA DOMANDA
+
+Write a function that computes the player point rating (1 point for wins, 0.5 points for draws, 0 points for defeats). How are point ratings distributed? Why?
+
+```{r }
+punti <- data |> 
+  pivot_longer(cols = c(White, Black), names_to = "Color", values_to = "Player") |>
+  mutate(ScorePlayer = case_when(
+    Score == 1.0 & Color == "White"   ~ 1,
+    Score == 1.0 & Color == "Black"   ~ 0,
+    Score == 0.0 & Color == "White"   ~ 0,
+    Score == 0.0 & Color == "Black"   ~ 1,
+    Score == 0.5 ~ 0.5,
+
+  )) |> 
+  group_by(Player) |>
+  summarise (
+    TotalScore = sum(ScorePlayer),
+    Matches = n()
+  ) |> 
+  arrange(-TotalScore)
+
+punti
+```
+
+```{r }
+distribuzione_punteggio <- ggplot(data = punti) +
+  geom_freqpoly(mapping = aes(x= TotalScore), linewidth = 0.8) +
+  labs(
+    title = "Distribuzione dei punteggi totali",
+    x = "Punteggio Totale",
+    y = "Frequenza"
+  )+
+  scale_x_continuous(limits = c(0, NA))
+
+distribuzione_punteggio
+```
+
+La distribuzione dei punteggi totali è asimmetrica a destra , con un picco vicino allo zero e una lunga coda verso i valori più alti.
+
+Questo perchè solo una piccola parte dei giocatori avrà prestazioni eccellenti per avere tanti punteggi, mentre la maggioranza dei giocatori otterrà un punteggio basso.
+
+## TERZA DOMANDA 
+An interesting property of Elo’s ratings is that the sum of all player ratings is always 0. Formally show this property.
+
+Per dimostrare che la somma degli r dei giocatori è sempre 0 parto dall'inizio.
+
+**1. Condizione iniziale:** All'inizio, per definizione, i punteggi Elo di tutti i giocatori sono impostati a $0$: $$r_i^{(0)} = 0 \quad \text{e} \quad r_j^{(0)} = 0 \implies \sum r^{(0)} = 0$$
+
+**2. Aggiornamento:** Dopo una partita tra il giocatore $i$ e il giocatore $j$, i nuovi punteggi vengono calcolati aggiungendo una variazione $\Delta r$ ai punteggi precedenti: $$r_i^{(1)} = r_i^{(0)} + \Delta r_i^{(0)}$$ $$r_j^{(1)} = r_j^{(0)} + \Delta r_j^{(0)}$$
+
+dove le variazioni sono definite da: $$\Delta r_i^{(0)} = \kappa (s_{i,j} - \mu_{i,j})$$ $$\Delta r_j^{(0)} = \kappa (s_{j,i} - \mu_{j,i})$$
+
+**3. Calcolo della somma delle variazioni (**$\Delta r$): Sommando le variazioni dei due giocatori coinvolti nella partita: $$\Delta r_i^{(0)} + \Delta r_j^{(0)} = \kappa (s_{i,j} - \mu_{i,j}) + \kappa (s_{j,i} - \mu_{j,i})$$ $$\Delta r_i^{(0)} + \Delta r_j^{(0)} = \kappa \big[ (s_{i,j} + s_{j,i}) - (\mu_{i,j} + \mu_{j,i}) \big]$$
+
+Sfruttando le proprietà note del sistema: 
+
+$$s_{i,j} + s_{j,i} = 1$$ 
+
+$$\mu_{i,j} + \mu_{j,i} = 1$$
+
+Sostituendo queste identità nell'equazione: $$\Delta r_i^{(0)} + \Delta r_j^{(0)} = \kappa (1 - 1) = \kappa \cdot 0 = 0$$
+
+**4. Somma dei punteggi aggiornati:** Sommando i punteggi finali dopo la partita: $$r_i^{(1)} + r_j^{(1)} = \big( r_i^{(0)} + r_j^{(0)} \big) + \big( \Delta r_i^{(0)} + \Delta r_j^{(0)} \big) = 0 + 0 = 0$$
+
+**5. Step successivi:** Nelle partite successivo il valore della somma degli r sarà comuqnue 0 in quanto la somma dei delta=0 e la somma dei rating del turno precedente è 0 per la simostrazione del punto successivo
+
+In generale a ogni partita il rating assegnato al giocatore che vince è uguale a quello tolto al giocatore che perde.
+
+
+
+## QUARTA DOMANDA
+Write a function that computes the player Elo rating (set ζ=400 and κ=25) (Hint: take advantage of the 0-sum property to optimize the code). Obserse its distribution: why is different from the point distribution? Verify the 0-sum property for Elo’s ratings
+
+
+```{r }
+
+calcola_elo <- function(data, C = 400, k = 25) {
+  
+  #creo vettore con id giocatori e punteggio iniziale di elo = 0
+  giocatori <- unique(c(data$White, data$Black))
+  elo <- setNames(rep(0, length(giocatori)), giocatori)
+  
+  # Aggiorno il rating partita per partita
+  for (i in 1:nrow(data)) {
+    
+    bianco <- as.character(data$White[i])
+    nero <- as.character(data$Black[i])
+    
+    # Punteggio effettivo del Bianco
+    s_bianco <- data$Score[i]
+    
+    # Punteggio atteso del Bianco
+    atteso_bianco <- 1 / (1 + 10^((elo[nero] - elo[bianco]) / C))
+    
+    # Variazione del rating
+    delta <- k * (s_bianco - atteso_bianco)
+    
+    # Aggiorno i rating dei due giocatori
+    elo[bianco] <- elo[bianco] + delta
+    elo[nero] <- elo[nero] - delta
+  }
+  
+  return(elo)
+}
+
+```
+
+```{r }
+rating_elo <- calcola_elo(data)
+
+Rating_Punti <- data.frame(
+  Player = as.numeric(names(rating_elo)),
+  #Rating_elo = round(as.numeric(rating_elo), 2)
+  Rating_elo = as.numeric(rating_elo)
+) |>
+full_join(punti, by= "Player") |>
+arrange(Player)
+
+head(Rating_Punti,10)
+```
+
+```{r }
+distribuzione_punteggiElo <- ggplot(data = Rating_Punti) +
+  geom_freqpoly(mapping = aes(x = Rating_elo, color = "Elo rating"), linewidth = 0.8) +
+  geom_freqpoly(mapping = aes(x = TotalScore, color = "Total Score"), linewidth = 0.8) +
+  labs(
+    title = "Distribuzione dei rating Elo vs Punti Totali",
+    x = "Punteggio giocatore",
+    y = "Frequenza",
+    legend=TRUE
+  )
+
+distribuzione_punteggiElo
+```
+
+Si nota come i punti totali non possano essere negativi perchè vengono assegnati solo positivamente, inoltre c'è un alta concentrazione di punteggio intorno allo zero. E' una power-low con coda lunga ovvero ci sono pochi giocatori che hanno punteggi tanto grandi.
+
+Nella distribuzione del rating Elo invece, essendo che la somma dei rating è zero, possono esserci dei giocatori che hanno solo perso partite o ne hanno giocate poche e perse molte, e quindi il punteggio può essere negativo. Il picco è sempre intorno allo zero anche se più spostato verso i valori negativi, ed è più basso dello Score Totale. 
+
+
+```{r }
+zero_property = sum(Rating_Punti$Rating_elo)
+zero_property
+
+cat("\nSe sommo la colonna dei Eanking elo ottengo un numero estremamente piccolo:", zero_property, " che può essere dato dal metodo di arrotondamento di R. Essendo un numero estremamente piccolo si può presupporre che il valore della somma sia uguale a 0")
+
+```
+
+## QUINTA DOMANDA
+Are point and Elo ratings correlated? Are top Elo players overlapping with top point players?
+```{r }
+correlazione <- cor(Rating_Punti$TotalScore, Rating_Punti$Rating_elo,
+    method = "pearson")
+
+grafico_correlazione <- ggplot(data= Rating_Punti, mapping = aes(x= TotalScore , y= Rating_elo ))+
+  geom_point(alpha = 0.4) + 
+  geom_smooth(se = TRUE) +
+  labs(
+    title = "Correlazione rating Elo vs Punti Totali",
+    subtitle = paste("Coefficiente di correlazione di Pearson:", round(correlazione, 3)),
+    x = "Punteggio giocatore",
+    y = "rating Elo"
+  )
+
+grafico_correlazione
+
+```
+
+
+Il grafico mostra una correlazione positiva abbastanza forte tra i due punteggi, confermata anche dal coefficiente di pearson= 0,72. Quindi un giocatore con uno Score totale elevato tende ad avere un rating di elo elevato. Tuttavia, i due punteggi non sono perfettamente correlati, come si nota dal grafico.
+
+La differenza tra i due punteggi dipende da come vengono calcolati: il punteggio totale è dato dalla somma dei punti, mentre il rating Elo viene aggiornato tenendo conto anche del rating dell'avversario. Di conseguenza, una vittoria contro un avversario con un rating elevato può comportare un guadagno Elo maggiore rispetto a una vittoria contro un avversario più debole.
+
+I top player calcolati ocn i due punteggi diversi possono quindi essere diversi in base al metodo di calcolo.
+
+## SESTA DOMANDA
+Test if the number of played games has an effect on the Elo and point player ratings
+```{r }
+correlazione_elo_matches <- cor(Rating_Punti$Rating_elo, Rating_Punti$Matches, method = "pearson")
+
+grafico_correlazione_elo_matches <- ggplot(data= Rating_Punti, mapping = aes(x= Rating_elo , y= Matches ))+
+  geom_point(alpha = 0.4) + 
+  geom_smooth(se = TRUE) +
+  labs(
+    title = "Correlazione rating Elo vs numero matches",
+    subtitle = paste("Coefficiente di correlazione di Pearson:", round(correlazione_elo_matches, 3)),
+    x = "Rating Elo giocatore",
+    y = "number matches"
+  )
+
+grafico_correlazione_elo_matches
+```
+
+
+Il grafico mostra una correlazione positiva abbastanza forte tra il rating Elo e il numero di match giocati, confermata dal coefficiente di Pearson pari a 0,639.
+
+Dal grafico emerge come i giocatori con un Elo molto alto tendano ad avere un numero di partite superiore. Al contrario, i giocatori con un punteggio simile allo zero si concentrano nella fascia con poche partite giocate. Infine, chi presenta un punteggio negativo ha disputato un numero di match contenuto, leggermente superiore a chi è fermo allo zero ma comunque nettamente inferiore rispetto ai giocatori con punteggi elevati.
+
+```{r }
+correlazione_score_matches <- cor(Rating_Punti$TotalScore, Rating_Punti$Matches, method = "pearson")
+
+grafico_correlazione_score_matches <- ggplot(data= Rating_Punti, mapping = aes(x= TotalScore , y= Matches ))+
+  geom_point(alpha = 0.4) + 
+  geom_smooth(se = TRUE) +
+  labs(
+    title = "Correlazione Score totale vs numero matches",
+    subtitle = paste("Coefficiente di correlazione di Pearson:", round(correlazione_score_matches, 3)),
+    x = "Total Score",
+    y = "number matches"
+  )
+
+grafico_correlazione_score_matches
+```
+
+
+Il grafico evidenzia una correlazione positiva fortissima tra lo Score Totale e il numero di match giocati, confermata da un coefficiente di Pearson eccezionalmente alto pari a 0.99.   I punti si distribuiscono lungo una retta, dimostrando che all'aumentare delle partite giocate, il punteggio cresce in modo direttamente proporzionale.
