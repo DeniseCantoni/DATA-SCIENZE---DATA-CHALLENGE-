@@ -1,0 +1,101 @@
+---
+title: "Quinta data challenge"
+author: "Denise Cantoni"
+date: "2026-10-28"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, cache=TRUE, message =FALSE)
+```
+
+```{r}
+library(tidyverse)
+library(tidyquant)
+library(ineq)
+```
+
+
+```{r}
+sp500 <- tq_index("SP500")
+
+write_csv(sp500, "data/sp500.csv")
+sp500 <- read_csv("data/sp500.csv")
+sp500
+```
+
+# PRIMA DOMANDA
+How unequal are the company weights in the S&P 500?
+
+```{r}
+distribuzione <-ggplot(sp500, aes(x = weight)) +
+  geom_histogram( ) +
+  labs(
+    title = "Distribuzione dei pesi delle 500 aziende",
+    x = "Pesi aziende (%)",
+    y = "Numero di aziende"
+  ) +
+  theme_minimal()
+
+distribuzione
+```
+
+L'istogramma mostra che i pesi delle aziende sono distribuiti in modo asimmetrico: la maggior parte delle aziende ha un peso molto basso, mentre solo poche aziende hanno pesi elevati. Questo indica che il contributo delle aziende all'indice non è uniforme e che alcune società hanno un'influenza molto maggiore rispetto alle altre.
+
+# SECONDA DOMANDA
+How much of the index is represented by its largest companies?
+
+```{r}
+#peso totale di tutte le aziende
+tot_weight = sum(sp500$weight)
+
+#peso delle prime 10 aziende
+top_10 <- sp500 |>
+  arrange(desc(weight)) |>
+  head(10)
+
+top_weight <- sum(top_10$weight)
+
+#percentuale
+percentuale <- (top_weight / tot_weight) * 100
+percentuale <- round(percentuale, 2)
+cat ("La percentuale delle prime 10 aziende con peso maggiore ricopre il:", percentuale, "% dell'intero peso delle aziende")
+
+```
+
+# TERZA DOMANDA
+What does the Lorenz curve tell us about concentration?
+
+```{r}
+#curva di lorenz
+lorenz <- Lc(sp500$weight)
+
+df_lorenz <- data.frame(p = lorenz$p, L = lorenz$L)
+
+ggplot(df_lorenz, aes(p, L)) +
+  geom_line(linewidth = 1) +
+  geom_abline(slope=1, intercept = 0, linetype = "dashed") +
+  labs(
+    title = "Lorenz curve for weight",
+    x = "Percentuale cumulata delle aziende",
+    y = "Percentuale cumulata del peso nell'indice"
+  ) +
+  theme_minimal()
+```
+
+Dal grafico si nota una forte differenza tra la linea tratteggiata, che indica la perfetta uguaglianza, rispetto alla distribuzione cumulativa effettiva. La curva inizia a impennarsi verso il 75%, questo significa che il peso delle aziende è sostenuto dal 30% delle aziende totali
+
+# QUARTA DOMANDA
+What is the Gini coefficient of the S&P 500 weights?
+
+Il coefficiente di Gini è una misura statistica che serve a quantificare la disuguaglianza (o la concentrazione) all'interno di una distribuzione di valori.
+
+- Valore 0 significa che tutte le componenti hanno esattamente lo stesso peso
+- Valore 1 significa che l'intero peso dell'indice è concentrato in un'unica azienda
+
+```{r}
+gini_weight = Gini(sp500$weight)
+gini_weight
+```
+
+Il valore di Gini conferma ciò che si può vedere con la curva di Lorenz
