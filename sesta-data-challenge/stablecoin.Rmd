@@ -1,0 +1,175 @@
+---
+title: "Sesta data challenge"
+author: "Denise Cantoni"
+date: "2026-10-28"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, cache=TRUE, message =FALSE)
+```
+
+# PRIMA DOMANDA
+How do their transfer sizes differ?
+
+```{r}
+library(usethis)
+library(tidyverse)
+library(httr2)
+
+edit_r_environ()
+```
+
+```{r}
+api_key <- Sys.getenv("ETHERSCAN_API_KEY")
+```
+
+```{r}
+USDC = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+USDT = "0xdac17f958d2ee523a2206206994597c13d831ec7"
+DAI  = "0x6b175474e89094c44da98b954eedeac495271d0f"
+```
+
+```{r eval=FALSE}
+get_transfers <- function(address) {
+
+  response <- request("https://api.etherscan.io/v2/api") |>
+    req_url_query(
+      chainid = 1,
+      module = "account",
+      action = "tokentx",   #ERC-20
+      #utilizzo contractaddress perchè ho a disposizione uno smart contract 
+      contractaddress = address,
+      startblock = 0,
+      endblock = 99999999,
+      page = 1,
+      offset = 1000,
+      sort = "asc",
+      apikey = api_key
+    ) |>
+    req_perform() |>
+    resp_body_json(simplifyVector = TRUE)
+
+  response
+}
+
+usdc <- get_transfers(USDC)
+usdt <- get_transfers(USDT)
+dai  <- get_transfers(DAI)
+
+
+write_rds(usdc, "data/usdc.rds")
+write_rds(usdt, "data/usdt.rds")
+write_rds(dai, "data/dai.rds")
+
+```
+
+```{r}
+usdc <- read_rds("data/usdc.rds")
+usdt <- read_rds("data/usdt.rds")
+dai  <- read_rds("data/dai.rds")
+```
+
+```{r}
+tidy_table <- function(name) {
+  name$result |>
+  as_tibble() |>
+  transmute(
+    tokenName,
+    value,
+    amount = as.numeric(value) / 10^as.numeric(tokenDecimal),
+    from,
+    to,
+    tokenSymbol,
+    tokenDecimal
+  )
+}
+
+transactions_usdc <- tidy_table(usdc)
+transactions_usdt <- tidy_table(usdt)
+transactions_dai <- tidy_table(dai)
+
+transactions_usdc
+transactions_usdt
+transactions_dai
+```
+
+```{r}
+transactions <- bind_rows(
+  USDC = transactions_usdc,
+  USDT = transactions_usdt,
+  DAI = transactions_dai,
+  .id = "stablecoin"
+)
+
+info <- transactions |>
+  group_by(stablecoin) |>
+  summarise(
+    numero_trasferimenti = n(),
+    among_total = sum(amount, na.rm = TRUE),
+    media = mean(amount, na.rm = TRUE),
+    mediana = median(amount, na.rm = TRUE),
+    minimo = min(amount, na.rm = TRUE),
+    massimo = max(amount, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+info
+```
+
+Dai dati emerge una differenza tra le tre stablecoin in termini di importo dei trasferimenti. DAI presenta gli importi più bassi, con una mediana di circa 20 unità, mentre USDC si colloca in una posizione intermedia, con una mediana di circa 300. USDT registra invece gli importi più elevati, con una mediana superiore a 6.087 unità.
+
+Per tutte e tre le stablecoin, la media è molto più alta della mediana. Questo indica che la maggior parte dei trasferimenti ha importi bassi, mentre poche transazioni di valore elevato aumentano notevolmente la media.
+
+```{r}
+confronto_transazioni <- ggplot(transactions, aes(x = stablecoin, y = amount)) +
+  geom_boxplot() +
+  scale_y_log10() +
+  labs(
+    title = "Confronto delle dimensioni dei trasferimenti",
+    x = "Stablecoin",
+    y = "Dimensioni trasferimento"
+  ) +
+  theme_minimal()
+
+confronto_transazioni
+```
+
+Il boxplot mostra che lo stablecoin con trasferimenti generalmente più grandi è USDT, mentre DAI è quello con trasferimenti più piccoli. Questo si può notare osservando l'altezza della mediana.
+
+Si nota anche una differenza nella variabilità degli importi. DAI presenta un box più schiacciato e uno scarto interquartile più piccolo rispetto agli altri due stablecoin, mentre USDC ha lo scarto interquartile più ampio e quindi una maggiore variabilità nella parte centrale della distribuzione. DAI presenta però diversi valori anomali, che indicano la presenza di trasferimenti molto più piccoli o molto più grandi rispetto alla maggior parte dei trasferimenti dello stesso token.
+
+In conclusione, le tre stablecoin differiscono sia per la dimensione tipica dei trasferimenti sia per la loro variabilità.
+
+
+# SECONDA DOMANDA
+How much transfer volume does each stablecoin generate?
+
+```{r}
+#quanti token vengono trasferiti complessivamente per USDC, USDT e DAI (somma importi per ciascun stablecoin)
+
+tot_volume <- transactions |>
+  group_by(stablecoin) |>
+  summarise(
+    volume_totale = sum(amount)
+  )
+
+tot_volume
+```
+
+Complessivamente il volume totale trasferito tramite USDT risulta nettamente superiore rispetto a quello delle altre stablecoin. Nello specifico, il volume di USDT supera di oltre il doppio quello di USDC ed è circa cento volte più elevato di quello di DAI. Poiché il numero di trasferimenti analizzato è identico per tutti e tre gli stablecoin (1000), questa forte differenza nei volumi evidenzia una differenza evidente nella dimensione media dei singoli trasferimenti.
+
+```{r}
+grafico_volume <-ggplot(tot_volume, aes(x = stablecoin, y = volume_totale)) +
+  geom_col() +
+  labs(
+    title = "Volume totale di ciascun stablecoin",
+    x = "Stablecoin",
+    y = "Volume totale trasferito"
+  ) +
+  theme_minimal()
+
+grafico_volume
+```
+
+Il grafico a barre rende ancora più evidente la differenza evidenziata nella tabella riassuntiva: la barra relativa a DAI risulta quasi impercettibile rispetto all'asse y, mentre USDC raggiunge poco più di 100 milioni e USDT supera anche i 250 milioni. Il grafico conferma quindi come, a parità di transazioni effettuate, il volume complessivo appartenga principalmente dallo stablecoin USDT.
