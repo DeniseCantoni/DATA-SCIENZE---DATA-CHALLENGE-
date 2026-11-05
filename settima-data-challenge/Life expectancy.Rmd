@@ -1,0 +1,89 @@
+---
+title: "Settima data challenge"
+author: "Denise Cantoni"
+date: "2026-11-04"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, cache=TRUE, message =FALSE)
+```
+
+```{r}
+library(tidyverse)
+library(gapminder)
+gapminder
+```
+
+## PRIMA DOMANDA
+Derive a formula to compute life expectancy of a continent (a group of countries)
+
+Per calcolare l'aspettativa di vita di un intero continente uso una media ponderata dalla popolazione dei singoli stati:i moltiplica l'aspettativa di vita di ciascun paese per la sua popolazione (ottenendo così il totale degli anni vissuti), si sommano questi valori per tutte le nazioni del continente e si divide infine il tutto per la popolazione totale continentale.
+
+```{r}
+aspettativeContinente <- gapminder |> 
+  mutate(LifeTot = lifeExp * pop) |>
+  group_by(continent, year) |>
+  summarise(
+    PopTot = sum(pop),
+    LifeTotContinent = sum(LifeTot),
+    LifeExp = LifeTotContinent / PopTot
+  ) |> 
+  select(-PopTot, -LifeTotContinent)
+
+aspettativeContinente
+```
+
+## SECONDA DOMANDA
+plot how life expectancy changed over time for each continent
+
+```{r}
+plot <- aspettativeContinente |>
+  ggplot(aes(x = year, y = LifeExp, color = continent)) +
+  geom_line(linewidth = 1) +
+  geom_point(size = 2) +
+  labs(
+    title = "Aspettative di vita dei continenti durante gli anni",
+    x = "Anno",
+    y = "Aspettativa di vita",
+    color = "Continente"
+  ) + 
+  theme_minimal()
+
+plot
+```
+
+Dal grafico si osserva un generale aumento dell'aspettativa di vita in tutti i continenti. Oceania, Europa e Americhe mantengono costantemente i valori più alti con una crescita regolare. Asia e Africa partono dai livelli più bassi, ma registrano l'incremento più marcato: l'Asia ha quasi recuperato i continenti più longevi. Si notano due andamenti interessanti. In asia si è registrato un calo dell'aspettativa di vita poco dopo il 1960, mentre l'Africa mostra un periodo costante tra il 1987 e il 2002, in cui l'aspettativa non è ne cresciuta ne aumentata.
+
+## TERZA DOMANDA
+do the same for the whole planet
+
+```{r}
+aspettativaVita <- gapminder |> 
+  mutate(LifeTot = lifeExp * pop) |>
+  group_by(year) |>
+  summarise(
+    PopTot = sum(pop),
+    LifeTotContinent = sum(LifeTot),
+    LifeExp = LifeTotContinent / PopTot
+  ) |> 
+  select(-PopTot, -LifeTotContinent)
+
+aspettativaVita
+```
+
+```{r}
+plotMondo <- aspettativaVita |>
+  ggplot(aes(x = year, y = LifeExp)) +
+  geom_line(color ="blue",linewidth = 1) +
+  geom_point(color ="blue", size = 2) +
+  labs(
+    title = "Aspettativa di vita nel mondo durante gli anni",
+    x = "Anno",
+    y = "Aspettativa di vita"
+  ) + 
+  theme_minimal()
+
+plotMondo
+```
+Dal grafico si osserva una crescita costante dell'aspettativa di vita globale, che passa da poco meno di 50 anni nel 1952 a più di 65 dopo gli anni 2000.  L'andamento mostra una breve periodo di stasi attorno al 1960, seguita da un forte incremento.
