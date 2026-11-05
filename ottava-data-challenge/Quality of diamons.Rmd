@@ -1,0 +1,245 @@
+---
+title: "Ottava data challenge"
+author: "Denise Cantoni"
+date: "2026-11-04"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, cache=TRUE, message =FALSE)
+```
+
+```{r}
+library(ggplot2)
+library(dplyr)
+library(tibble)
+
+diamonds_df <- ggplot2::diamonds |>
+  select(-x,-y, -z)
+diamonds_df
+```
+
+## PRIMA DOMANDA
+First of all, observe that low quality diamonds (with respect to cut, color and clarity) are more expensive.
+
+- Il taglio migliore è Ideale, il peggiore è Discreto
+- Il colore migliore è D, il peggiore è J.
+- La chiarezza migliore è IF, la peggiore è I1
+
+```{r}
+plot_cut <- diamonds_df |>
+  ggplot(aes(x = cut, y = price)) +
+  geom_boxplot( outlier.alpha = 0.1) +
+  labs(title = "Costo dei diamanti in base al loro taglio") + 
+  scale_y_log10() +
+  theme_minimal()
+```
+
+```{r}
+plot_color <- diamonds_df |>
+  ggplot(aes(x = color, y = price)) +
+  geom_boxplot( outlier.alpha = 0.1) +
+  labs(title = "Costo dei diamanti in base al loro colore") + 
+  scale_y_log10() +
+  theme_minimal()
+
+```
+
+```{r}
+plot_clarity <- diamonds_df |>
+  ggplot(aes(x = clarity, y = price)) +
+  geom_boxplot( outlier.alpha = 0.1) +
+  labs(title = "Costo dei diamanti in base alla loro chiarezza") + 
+  scale_y_log10() +
+  theme_minimal()
+
+```
+
+```{r}
+plot_cut
+plot_color
+plot_clarity
+```
+
+
+Analizzando i grafici si potrebbe affermazione che i diamanti con caratteristiche di colore, taglio e chiarezza di bassa qualità appaiono più costose rispetto a quelli con caratteristiche migliori. Infatti mediamente le caratteristiche migliori hanno i prezzi più bassi di tutti.
+
+
+## SECONDA DOMANDA
+Using models, find an explanation and solve the apparent paradox.
+
+Il prezzo dei diamanti non è dovuto solo alle loro caratteristiche ma anche alla loro grandezza. I diamanti più pregiati potrebbero essere venduti in dimensioni molto più piccole rispetto a quelli meno rari. Questo abbasserebbe di molto il loro valore reale, perchè a parità di carati varrebbero molto di più. Per questo ora normalizzeremo i dati in base anche alla dimensione (carati) dei diamanti e rivaluteremo i grafici, in modo da avere il prezzo per un carate del diamante.
+
+```{r}
+diamonds_normalizated <- diamonds_df |>
+  mutate(PriceNorm = price/carat)
+diamonds_normalizated
+```
+```{r}
+table_cut <- diamonds_df |>
+  mutate(price_norm = price / carat) |>
+  group_by(cut) |>
+  summarise(
+    mean_price = mean(price),
+    mean_price_norm = mean(price_norm),
+    max_price = max(price),
+    max_price_norm = max(price_norm),
+    min_price = min(price),
+    min_price_norm = min(price_norm)
+  )
+```
+
+```{r}
+table_color <- diamonds_df |>
+  mutate(price_norm = price / carat) |>
+  group_by(color) |>
+  summarise(
+    mean_price = mean(price),
+    mean_price_norm = mean(price_norm),
+    max_price = max(price),
+    max_price_norm = max(price_norm),
+    min_price = min(price),
+    min_price_norm = min(price_norm)
+  )
+```
+
+```{r}
+table_clarity <- diamonds_df |>
+  mutate(price_norm = price / carat) |>
+  group_by(clarity) |> 
+  summarise(
+    mean_price = mean(price),
+    mean_price_norm = mean(price_norm),
+    max_price = max(price),
+    max_price_norm = max(price_norm),
+    min_price = min(price),
+    min_price_norm = min(price_norm)
+  )
+```
+
+```{r}
+table_cut
+table_color
+table_clarity
+```
+
+L'analisi delle tabelle conferma la relazione tra il prezzo dei diamanti e il loro peso(carati) guardando le differenze di prezzo tra quello precedente e quello normalizzato. 
+
+Sebbene sia emersa una situazione migliore ci sono dei dati discordanti in quanto, per esempio nel colore, i dati mostrino come il colore peggiore J abbia un prezzo medio minore rispetto al colore migliore D, il quale a sua volta ha un prezzo minore di un colore medio come G.
+
+Come per il colore anche per taglio e chiarezza non abbiamo una situazione molto chiara e definita.
+
+```{r}
+plot_cut_norm <- diamonds_normalizated |>
+  ggplot(aes(x = cut, y = PriceNorm)) +
+  geom_boxplot( outlier.alpha = 0.1) +
+  labs(title = "Costo per un carate dei diamanti in base al loro taglio") + 
+  scale_y_log10() +
+  theme_minimal()
+
+plot_color_norm <- diamonds_normalizated |>
+  ggplot(aes(x = color, y = PriceNorm)) +
+  geom_boxplot( outlier.alpha = 0.1) +
+  labs(title = "Costo per un carate dei diamanti in base alloro colore") +
+  scale_y_log10() +
+  theme_minimal()
+
+plot_clarity_norm <- diamonds_normalizated |>
+  ggplot(aes(x = clarity, y = PriceNorm)) +
+  geom_boxplot( outlier.alpha = 0.1) +
+  labs(title = "Costo per un carate dei diamanti in base alla loro chiarezza") + 
+  scale_y_log10() +
+  theme_minimal()
+```
+
+```{r}
+plot_cut_norm
+plot_color_norm
+plot_clarity_norm
+```
+
+I dati espressi nelle tabelle si possono vedere facilmente nella rappresentazione boxplot.
+
+Probabilmente la normalizzazione eseguita in questo modo non riesce a esprimere la dipendenza del prezzo dalla dimensione/peso del diamante. Per questo creiamo un modello per studiarne il comportamento togliendo i residui(influenza dei carati sul prezzo)
+
+Analizzo il prezzo togliendo la dipendenza tra i carati e le altre variabili di qualità per valutare le singole caratteristiche singolarmente
+
+```{r}
+# Impostazione dei fattori dal peggiore al migliore
+diamonds_normalizated <- diamonds_normalizated %>%
+  mutate(
+    cut       = factor(cut, levels = c("Fair", "Good", "Very Good", "Premium", "Ideal")),
+    color     = factor(color, levels = c("J", "I", "H", "G", "F", "E", "D")),
+    clarity   = factor(clarity, levels = c("I1", "SI2", "SI1", "VS2", "VS1", "VVS2", "VVS1", "IF"))
+  )
+
+# Stima del modello multiplo comprendente anche i carati
+modello_multiplo <- lm(log(price) ~ log(carat) + cut + color + clarity, data = diamonds_normalizated)
+
+# Tabella finale dei coefficienti
+summary(modello_multiplo)
+```
+
+L'analisi dei risultati del modello di regressione multipla fornisce una panoramica di come il prezzo dei diamanti dipenda non solo dal peso, ma anche dalle caratteristiche qualitative. Il coefficiente di determinazione multipla ($R^2$) pari a 0,9826 indica che il modello spiega ben il 98,26% della varianza del logaritmo del prezzo.
+
+Il coefficiente associato a `log(carat)`, pari a circa 1,88, mostra un impatto fortissimo e non lineare del peso: un incremento percentuale dei carati si riflette in modo esponenziale sul prezzo finale, a parità di altre condizioni
+
+Al contrario, sebbene anche il taglio, il colore e la chiarezza influenzino il valore della gemma, il loro impatto risulta decisamente meno impattante rispetto a quello dei carati. Per questa ragione, nei passaggi successivi verrà impiegato un modello in grado di depurare il prezzo dalla dipendenza dal peso, così da poter isolare e valutare con precisione l'effetto di ciascuna singola caratteristica qualitativa sul prezzo finale.
+
+```{r}
+# Modello log-log per isolare l'effetto dei carati dal prezzo
+modello_carat_effect <- lm(log(price) ~ log(carat), data = diamonds_normalizated)
+
+# Aggiunta dei residui al dataset
+diamonds_normalizated <- diamonds_normalizated %>%
+  mutate(price_residuals = residuals(modello_carat_effect))
+
+diamonds_normalizated
+```
+
+
+```{r}
+# Boxplot per Cut
+plot_cut <- diamonds_normalizated |>
+  ggplot(aes(x = cut, y = price_residuals)) +
+  geom_boxplot(coef = 2, outlier.alpha = 0.1) +
+  labs(title = "Prezzo dei tagli senza la dipendenza dal carate", 
+       x = "Taglio", 
+       y = "Prezzo residuo"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "none")
+
+# Boxplot per Color
+plot_color <- ggplot(diamonds_normalizated, aes(x = color, y = price_residuals)) +
+  geom_boxplot(coef = 2, outlier.alpha = 0.1) +
+  labs(title = "Prezzo dei colori senza la dipendenza dal carate", 
+       x = "Colore", 
+       y = "Prezzo residuo"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "none")
+
+# Boxplot per Clarity
+plot_clarity <- ggplot(diamonds_normalizated, aes(x = clarity, y = price_residuals)) +
+  geom_boxplot(coef = 2, outlier.alpha = 0.1) +
+  labs(title = "Prezzo delle chiarezze senza la dipendenza dal carate", 
+       x = "Chiarezza", 
+       y = "Prezzo Residuo"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "none")
+
+plot_cut
+plot_color
+plot_clarity
+```
+
+Dall'analisi dei grafici basati sul modello dei residui si capisce come si risolve il paradosso iniziale e la logica del mercato dei diamanti. Usando la regressione per ripulire il prezzo dall'effetto del peso in carati, i grafici del taglio, del colore e della chiarezza mostrano finalmente l'andamento coerente che ci aspetteremmo.
+
+Guardando il taglio, ad esempio, si nota che il valore più basso spetta alla categoria Fair, per poi salire gradualmente fino ad arrivare al taglio Ideal, che ha il prezzo più alto e si trova sopra lo zero. Questo significa che sul mercato un taglio ideale viene premiato con un prezzo superiore rispetto a quello che ci si aspetterebbe solo in base alla sua grandezza, mentre tutti i valori negativi delle altre categorie indicano che il prezzo reale risulta più basso del previsto a causa di una lavorazione meno accurata.
+
+Analogamente nel grafico del colore si nota una situazione simile: la classe J, che è la peggiore, è nella zona negativa sotto lo zero. Man mano che ci si sposta verso le classi superiori e più pregiate, i dati si spostano verso l'alto, premiando le tonalità migliori con mediane positive e valori crescenti.
+
+Lo stesso comportamento si ripete per la chiarezza. Partendo dalla classe I1, che sta nella zona negativa, la situazione migliora fino a raggiungere il picco con la classe IF. Quest'ultima mostra la mediana più alta e un'elevata concentrazione di valori positivi.
+
