@@ -120,8 +120,8 @@ ggplot(annual, aes( x = posizione_anno, y = media_anomalie, fill = media_anomali
   ) +
   theme_void() +
   theme(
-    plot.title = element_text(size = 12) 
-  )
+    plot.title = element_text(size = 12),
+    plot.background = element_rect(fill = "white", color = NA))
 
 ggsave("grafico_lineare.png", width=10, height=10, dpi = 300)
 ```
@@ -160,7 +160,9 @@ ggplot(spiral, aes(x = x, y = y, color = anomaly)) +
     midpoint = 0
   ) +
   labs(color = "Anomalie nelle temperature(°C)") +
-  theme_void()
+  theme_void() +
+  # Sfondo bianco 
+  theme(plot.background = element_rect(fill = "white", color = NA),)
 
 ggsave("grafico_lineare.png", width=10, height=10, dpi = 300)
 ```
@@ -187,7 +189,9 @@ ggplot(temp, aes(x = month_num, y = anomaly, color = Year, group = Year)) +
   geom_line(alpha = 0.65, linewidth = 0.6) +
   
   scale_color_gradientn(colors = c("#74add1", "#2166ac", "#762a83", "#e7298a", "#fd8d3c", "#b2182b", "#800020"))+
-  theme_void()
+  theme_void() +
+  # Sfondo bianco 
+  theme(plot.background = element_rect(fill = "white", color = NA),)
 
 ggsave("grafico_lineare.png", width=10, height=10, dpi = 300)
 ```
