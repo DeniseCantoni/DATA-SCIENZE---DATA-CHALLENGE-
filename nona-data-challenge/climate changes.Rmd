@@ -1,0 +1,198 @@
+---
+title: "Nona data challenge"
+author: "Denise Cantoni"
+date: "2026-11-09"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, cache=TRUE, message =FALSE)
+```
+
+
+## Design your own piece of climate data art using the same dataset.
+
+You are free to experiment with geometric shapes, color palettes, transparency, repetition, coordinate transformations, and visual composition.
+
+Create an original visualization using ggplot2 and the NASA GISTEMP dataset.
+
+Your artwork should satisfy three requirements:
+
+- It must be generated programmatically from the dataset, rather than manually illustrated.
+- At least one visual property (color, size, position, shape, or opacity) must encode a numerical variable.
+- The visual composition must communicate a meaningful aspect of global warming.
+
+You may remove conventional statistical elements such as axes, titles, legends, and labels, but you must document how the data are mapped to the artwork.
+
+```{r}
+
+library(tidyverse)
+
+url <- paste0(
+  "https://data.giss.nasa.gov/gistemp/",
+  "tabledata_v4/GLB.Ts+dSST.csv"
+)
+
+temp_raw <- read_csv(
+  url,
+  skip = 1,
+  na = c("***", "****"),
+  show_col_types = FALSE
+)
+
+glimpse(temp_raw)
+
+```
+
+```{r}
+temp <- temp_raw |>
+  select(Year, Jan:Dec) |>
+  pivot_longer(
+    cols = Jan:Dec,
+    names_to = "month",
+    values_to = "anomaly"
+  ) |>
+  mutate(
+    month = factor(month, levels = month.abb),
+    date = as.Date(
+      paste(Year, month, "01", sep = "-"),
+      format = "%Y-%b-%d"
+    )
+  ) |>
+  drop_na(anomaly)
+
+head(temp, n = 12)
+
+```
+
+```{r}
+
+temp |>
+  summarise(
+    observations = n(),
+    mean_anomaly = mean(anomaly),
+    median_anomaly = median(anomaly),
+    sd_anomaly = sd(anomaly),
+    min_anomaly = min(anomaly),
+    max_anomaly = max(anomaly)
+  )
+
+```
+
+```{r}
+
+decades <- temp |>
+  mutate(decade = (Year %/% 10) * 10) |>
+  group_by(decade) |>
+  summarise(
+    mean_anomaly = mean(anomaly),
+    sd_anomaly = sd(anomaly),
+    .groups = "drop"
+  )
+
+decades
+
+```
+
+## Proposte di Data art che si ispirano a quelle viste a lezione
+
+```{r, fig.width=8, fig.height=8, out.width="100%"}
+annual <- temp |>
+  group_by(Year) |>
+  summarise(
+    media_anomalie = mean(anomaly, na.rm = TRUE)
+    ) |>
+  arrange(Year) |>
+  mutate(posizione_anno = row_number())
+
+ggplot(annual, aes( x = posizione_anno, y = media_anomalie, fill = media_anomalie)) +
+  geom_col(width = 0.9) +                    #riduce spazi vuoti tra una colonna e l'altra
+  coord_polar(theta = "x", start = 0) +      #asse x è avvolta in cerchio e inizia dal punto in alto centrale
+  scale_fill_gradient2(
+    low = "#053061",
+    mid = "#F7F7F7",
+    high = "#B2182B",
+    midpoint = 0
+  ) +
+  labs(
+    title = "Anomalie della temperatura globale Annuale",
+    fill = "Anomalie nelle temperature(°C)"
+  ) +
+  theme_void() +
+  theme(
+    plot.title = element_text(size = 12) 
+  )
+
+ggsave("grafico_lineare.png", width=10, height=10, dpi = 300)
+```
+
+L'opera visualizza le variazioni delle temperature globali annuali trasformando il tempo in un percorso circolare: gli anni scorrono in cerchio a partire dall'alto, mentre l'altezza di ogni colonna rappresenta il valore dell'anomalia termica, che può essere positiva o negativa (all'interno del cerchio). I colori sottolineano il fenomeno rendendo più facile la comprensine immediata: le tonalità di blu indicano temperature più basse della norma mentre il rosso evidenzia temperature più calde.
+
+L'analisi del grafico rivela l'andamento del riscaldamento globale. Nella prima metà del cerchio prevalgono barre corte e tonalità fredde, che testimoniano anni caratterizzati da anomalie discrete o vicine alla media, principalmente negative. Man mano che si procede lungo la circonferenza, si nota che le barre diventano sempre più lunghe e si colorano sempre di più di rosso. Gli ultimi anni sono estremamente rossi e alti rispetto al testo degli anni considerati creando una forma che ricorda un guscio di una chiocciola.
+
+
+
+```{r, fig.width=7, fig.height=7, out.width="100%"}
+spiral <- temp |>
+  arrange(date) |>
+  mutate(
+    numero_mese = as.integer(month),
+    numero_anno = Year - min(Year),
+    tot_anni = max(Year) - min(Year) + 1,
+    
+    angle = (3 * pi / 4) - 2 * pi * numero_anno / tot_anni,     # Partenza dall'angolo in alto a sinistra in senso orario
+    radius = 13 - numero_mese,                                  # Raggio basato sul Mese
+
+    # Coordinate della spirale quadrata
+    x = radius * cos(angle) /
+      pmax(abs(cos(angle)), abs(sin(angle))),
+    y = radius * sin(angle) /
+      pmax(abs(cos(angle)), abs(sin(angle)))
+  )
+
+ggplot(spiral, aes(x = x, y = y, color = anomaly)) +
+  geom_point(size = 1.7) +
+  coord_equal() +
+  scale_color_gradient2(
+    low = "#053061",
+    mid = "#F7F7F7",
+    high = "#B2182B",
+    midpoint = 0
+  ) +
+  labs(color = "Anomalie nelle temperature(°C)") +
+  theme_void()
+
+ggsave("grafico_lineare.png", width=10, height=10, dpi = 300)
+```
+
+I punti sono disposti lungo un percorso geometrico a forma di quadrato che si sviluppa dall'esterno verso il centro: la posizione spaziale traccia il fattore temporale, dove l'angolo rappresenta il susseguirsi degli anni e la distanza dal centro (il raggio) organizza i mesi. Ad esempio, partendo dall'esterno, il primo punto in alto a sinistra rappresenta gennaio del primo anno in archivio; seguendo il percorso verso il centro si ripercorrono i mesi dell'anno fino a dicembre.
+
+Come visto sopra con la forma a guscio di chiocciola, anche questa visualizzazione mostra l'avanzare del riscaldamento globale. Nei primi anni, che corrispondono al triangolo superiore della diagonale prevalgono punti dai toni freddi ma tenui. Spostandosi verso la metà sotto la diagonale i punti si colorano di rosso e diventano più intensi.
+
+
+```{r, fig.width=6, fig.height=6, out.width="100%"}
+temp <- temp |>
+  mutate(
+    month = factor(month, levels = month.abb),
+    month_num = as.numeric(month)
+  ) |>
+  drop_na(anomaly)
+
+ggplot(temp, aes(x = month_num, y = anomaly, color = Year, group = Year)) +
+  
+  # Linea dello zero
+  geom_hline(yintercept = 0, color = "gray30", linewidth = 0.7) +
+  
+  # Linee per ciascun anno
+  geom_line(alpha = 0.65, linewidth = 0.6) +
+  
+  scale_color_gradientn(colors = c("#74add1", "#2166ac", "#762a83", "#e7298a", "#fd8d3c", "#b2182b", "#800020"))+
+  theme_void()
+
+ggsave("grafico_lineare.png", width=10, height=10, dpi = 300)
+```
+
+In questo grafico la mappatura dei dati dispone i mesi dell'anno sull'asse x, da gennaio a dicembre. L'asse y indica il valore dell'anomalia termica. Ogni linea continua rappresenta l'andamento in un anno, che viene specificato attraverso il colore: i decenni passati sono raffigurati con tonalità fredde come il blu e il viola, mentre gli anni più recentihanno toni caldi come rosa,arancione e rosso.
+
+Come i precedenti, anche questo grafico conferma lo stesso andamento: le linee degli anni più remoti, posizionate nella parte inferiore, ma vicine allo zero, sono caratterizzate da toni freddi di blu e viola. Salendo verso l'alto, le linee si colorano di tonalità calde per rappresentare gli anni più recenti, evidenziando come l'intero fascio di linee si sia spostato verso l'alto nel corso del tempo.
+
