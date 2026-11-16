@@ -143,6 +143,57 @@ L'opera visualizza le variazioni delle temperature globali annuali trasformando 
 L'analisi del grafico rivela l'andamento del riscaldamento globale. Nella prima metà del cerchio prevalgono barre corte e tonalità fredde, che testimoniano anni caratterizzati da anomalie discrete o vicine alla media, principalmente negative. Man mano che si procede lungo la circonferenza, si nota che le barre diventano sempre più lunghe e si colorano sempre di più di rosso. Gli ultimi anni sono estremamente rossi e alti rispetto al testo degli anni considerati creando una forma che ricorda un guscio di una chiocciola.
 
 
+```{r}
+spiral <- temp |>
+  arrange(date) |>
+  mutate(
+    numero_mese = as.integer(month),
+    numero_anno = Year - min(Year),
+    tot_anni = max(Year) - min(Year) + 1,
+
+    angle = (3 * pi / 4) - 2 * pi * numero_anno / tot_anni,
+    radius = 13 - numero_mese,
+
+    # Coordinate della spirale quadrata
+    x = radius * cos(angle) /
+      pmax(abs(cos(angle)), abs(sin(angle))),
+    y = radius * sin(angle) /
+      pmax(abs(cos(angle)), abs(sin(angle)))
+  )
+
+ggplot(spiral, aes(x = x, y = y, fill = anomaly)) +
+
+  geom_tile(
+    width = 1,
+    height = 1
+  ) +
+
+  coord_equal() +
+
+  scale_fill_gradient2(
+    low = "#053061",
+    mid = "#F7F7F7",
+    high = "#B2182B",
+    midpoint = 0
+  ) +
+  labs(
+    title = "Termopixel",
+    subtitle = "Anomalie nelle temperature al passare del tempo"
+  ) +
+  theme_void() +
+  theme(
+    legend.position = "none",
+     plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
+     plot.subtitle = element_text(hjust = 0.5),
+    
+    panel.background = element_rect(fill = "white", color = NA),
+    plot.background = element_rect(fill = "white", color = NA)
+  )
+
+ggsave("grafico_quadrato1.png", width = 10, height = 10, dpi = 300)
+```
+In Termopixel, ogni rilevazione mensile è un "pixel" quadrato inserito in una griglia radiale. La posizione spaziale organizza il tempo: gli anni scorrono in senso orario partendo dall'angolo in alto a sinistra fino a compiere un giro completo, mentre i mesi si sviluppano dall'esterno (gennaio) verso il centro (dicembre) lungo dodici anelli concentrici quadrati. Il colore codifica infine l'anomalia termica rispetto alla media: procedendo in senso orario, si passa dai pixel freddi e tenui dei primi anni a un rosso sempre più intenso , rendendo visibile l'accelerazione del riscaldamento globale negli anni più recenti.
+
 
 ```{r, fig.width=7, fig.height=7, out.width="100%"}
 spiral <- temp |>
@@ -171,7 +222,8 @@ ggplot(spiral, aes(x = x, y = y, color = anomaly)) +
     high = "#B2182B",
     midpoint = 0
   ) +
-  labs(color = "Anomalie nelle temperature(°C)") +
+  labs(
+    color = "Anomalie nelle temperature(°C)") +
   theme_void() +
   theme(
   # Sfondo bianco 
@@ -179,7 +231,7 @@ ggplot(spiral, aes(x = x, y = y, color = anomaly)) +
   plot.background = element_rect(fill = "white", color = NA)
   )
 
-ggsave("grafico_quadrato.png", width=10, height=10, dpi = 300)
+ggsave("grafico_quadrato2.png", width=10, height=10, dpi = 300)
 ```
 
 I punti sono disposti lungo un percorso geometrico a forma di quadrato che si sviluppa dall'esterno verso il centro: la posizione spaziale traccia il fattore temporale, dove l'angolo rappresenta il susseguirsi degli anni e la distanza dal centro (il raggio) organizza i mesi. Ad esempio, partendo dall'esterno, il primo punto in alto a sinistra rappresenta gennaio del primo anno in archivio; seguendo il percorso verso il centro si ripercorrono i mesi dell'anno fino a dicembre.
